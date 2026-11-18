@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Relay – live video with chat</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,800&family=Figtree:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ground:#e8ecef; --panel:#fff; --ink:#0f2a33; --muted:#566a73; --line:#c4ced4;
+  --accent:#0f5c6e; --live:#e0301e; --screen:#0b1519;
+  --display:'Bricolage Grotesque','Trebuchet MS',system-ui,sans-serif;
+  --body:'Figtree',system-ui,-apple-system,'Segoe UI',sans-serif;
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%}
+body{background:var(--ground);color:var(--ink);font:400 16px/1.5 var(--body);
+  padding:env(safe-area-inset-top,0) 0 env(safe-area-inset-bottom,0)}
+button,input{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+[hidden]{display:none!important}
+.wrap{max-width:1100px;margin:0 auto;padding:20px 16px 40px}
+.brand{font:800 1.5rem/1 var(--display);letter-spacing:-.02em;display:flex;align-items:center;gap:10px}
+.brand i{width:14px;height:14px;border-radius:50%;background:var(--live);box-shadow:0 0 0 5px rgba(224,48,30,.18)}
+
+/* home */
+.home{display:grid;gap:28px;margin-top:8vh;max-width:640px}
+.home h1{font:800 clamp(2.4rem,8vw,4.4rem)/.95 var(--display);letter-spacing:-.035em;margin:0}
+.home p{color:var(--muted);margin:0;max-width:46ch}
+.choices{display:grid;gap:14px;grid-template-columns:1fr}
+@media(min-width:620px){.choices{grid-template-columns:1fr 1fr}}
+.choice{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px;display:grid;gap:12px;align-content:start}
+.choice h2{font:800 1.2rem/1.1 var(--display);margin:0}
+.choice p{font-size:.95rem}
+.btn{border:0;border-radius:10px;padding:12px 18px;font-weight:600;background:var(--accent);color:#fff}
+.btn.live{background:var(--live)}
+.btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+.btn:disabled{opacity:.5;cursor:default}
+.field{width:100%;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:#fff;text-transform:uppercase;letter-spacing:.15em}
+.field.plain{text-transform:none;letter-spacing:0}
+.msg{color:var(--live);font-size:.9rem;min-height:1.3em}
+
+/* stage */
+.stage{display:grid;gap:16px;margin-top:16px}
+@media(min-width:900px){.stage{grid-template-columns:minmax(0,1fr) 340px;align-items:start}}
+.screen{position:relative;background:var(--screen);border-radius:14px;overflow:hidden;aspect-ratio:16/9}
+.screen video{width:100%;height:100%;object-fit:contain;display:block;background:var(--screen)}
+.badge{position:absolute;top:12px;left:12px;display:flex;gap:8px;align-items:center;background:rgba(11,21,25,.78);color:#fff;border-radius:8px;padding:5px 10px;font-size:.85rem;font-weight:600}
+.badge b{width:9px;height:9px;border-radius:50%;background:#777}
+.badge.on b{background:var(--live);animation:pulse 1.6s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.35}}
+@media(prefers-reduced-motion:reduce){.badge.on b{animation:none}}
+.overlay{position:absolute;inset:0;display:grid;place-items:center;text-align:center;padding:20px;color:#dfe9ed;background:rgba(11,21,25,.7)}
+.unmute{position:absolute;right:12px;bottom:12px}
+.bar{display:flex;flex-wrap:wrap;gap:10px;margin-top:12px}
+.share{margin-top:12px;display:flex;gap:8px}
+.share input{flex:1;min-width:0;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:#fff;font-size:.9rem}
+.code{font:800 1.1rem var(--display);letter-spacing:.14em}
+
+/* chat */
+.chat{background:var(--panel);border:1px solid var(--line);border-radius:14px;display:flex;flex-direction:column;height:min(70vh,520px)}
+.chat h2{margin:0;padding:14px 16px;font:800 1.05rem var(--display);border-bottom:1px solid var(--line)}
+.log{flex:1;overflow-y:auto;padding:12px 16px;display:flex;flex-direction:column;gap:10px;list-style:none;margin:0}
+.log li{font-size:.95rem;overflow-wrap:anywhere}
+.log .who{font-weight:600;margin-right:6px}
+.log .host .who{color:var(--live)}
+.log .empty{color:var(--muted)}
+.send{display:flex;gap:8px;padding:12px;border-top:1px solid var(--line);flex-wrap:wrap}
+.send .name{flex:1 1 100%}
+.send .text{flex:1;min-width:0}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand"><i></i>Relay</div>
+
+  <!-- Home -->
+  <main id="home" class="home">
+    <h1>Go live from your phone or computer.</h1>
+    <p>Start a broadcast, share the link, and anyone who opens it can watch and chat while you stream.</p>
+    <div class="choices">
+      <section class="choice">
+        <h2>Broadcast</h2>
+        <p>Uses your camera and microphone. You can also share your screen on a computer.</p>
+        <button class="btn live" id="goLive">Start broadcast</button>
+        <div class="msg" id="hostErr" role="alert"></div>
+      </section>
+      <section class="choice">
+        <h2>Watch</h2>
+        <p>Enter the code the broadcaster gave you.</p>
+        <input class="field" id="codeIn" maxlength="6" placeholder="ABC123" aria-label="Broadcast code" autocomplete="off">
+        <button class="btn" id="watchBtn">Watch broadcast</button>
+      </section>
+    </div>
+  </main>
+
+  <!-- Stage -->
+  <main id="stage" class="stage" hidden>
+    <div>
+      <div class="screen">
+        <video id="video" playsinline autoplay muted></video>
+        <div class="badge" id="badge"><b></b><span id="badgeText">Connecting…</span></div>
+        <div class="overlay" id="overlay" hidden><span id="overlayText"></span></div>
+        <button class="btn unmute" id="unmute" hidden>Unmute</button>
+      </div>
+      <div class="bar" id="hostBar" hidden>
+        <button class="btn ghost" id="flip">Flip camera</button>
+        <button class="btn ghost" id="screenBtn">Share screen</button>
+        <button class="btn ghost" id="camBtn" hidden>Back to camera</button>
+        <button class="btn live" id="endBtn">End broadcast</button>
+      </div>
+      <div class="share" id="share" hidden>
+        <input id="link" readonly aria-label="Viewer link">
+        <button class="btn" id="copy">Copy link</button>
+      </div>
+      <p class="msg" id="stageErr" role="alert"></p>
+      <p id="codeLine" hidden>Code: <span class="code" id="codeText"></span></p>
+    </div>
+
+    <section class="chat" aria-label="Chat">
+      <h2>Comments</h2>
+      <ul class="log" id="log" aria-live="polite"><li class="empty">No comments yet.</li></ul>
+      <form class="send" id="sendForm">
+        <input class="field plain name" id="nameIn" maxlength="24" placeholder="Your name" aria-label="Your name" autocomplete="nickname">
+        <input class="field plain text" id="textIn" maxlength="300" placeholder="Write a comment" aria-label="Comment" autocomplete="off">
+        <button class="btn" type="submit">Send</button>
+      </form>
+    </section>
+  </main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  const PREFIX = 'relay-live-';
+  let peer, stream, isHost = false, facing = 'user';
+  let conn = null;                    // viewer -> host
+  const viewers = new Map();          // host: peerId -> {conn, call}
+  const history = [];
+
+  const clean = (s, n = 60) => String(s || '').replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, n);
+  const roomCode = () => {
+    const a = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789', r = crypto.getRandomValues(new Uint8Array(6));
+    return Array.from(r, v => a[v % a.length]).join('');
+  };
+  const show = (home) => { $('home').hidden = !home; $('stage').hidden = home; };
+  const setBadge = (on, text) => { $('badge').classList.toggle('on', on); $('badgeText').textContent = text; };
+  const overlay = text => { $('overlay').hidden = !text; $('overlayText').textContent = text || ''; };
+
+  /* ---------- chat UI ---------- */
+  function addMsg(m){
+    const log = $('log');
+    const empty = log.querySelector('.empty'); if (empty) empty.remove();
+    const li = document.createElement('li'); if (m.host) li.className = 'host';
+    const who = document.createElement('span'); who.className = 'who'; who.textContent = m.name;
+    li.append(who, document.createTextNode(m.text));
+    log.append(li); log.scrollTop = log.scrollHeight;
+  }
+
+  /* ---------- host ---------- */
+  function broadcast(obj){ viewers.forEach(v => { try { v.conn.send(obj); } catch(e){} }); }
+  function post(m){
+    history.push(m); if (history.length > 50) history.shift();
+    addMsg(m); broadcast({type:'chat', msg:m});
+  }
+  function count(){
+    const n = viewers.size;
+    setBadge(true, 'Live · ' + n + (n === 1 ? ' viewer' : ' viewers'));
+    broadcast({type:'count', n});
+  }
+  function drop(id){
+    const v = viewers.get(id); if (!v) return;
+    try { v.call && v.call.close(); } catch(e){}
+    viewers.delete(id); count();
+  }
+
+  async function startHost(){
+    $('hostErr').textContent = '';
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+      $('hostErr').textContent = 'This browser can’t access a camera. Open the site over https in a current browser.'; return;
+    }
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:facing}, audio:true});
+    } catch(e){
+      $('hostErr').textContent = 'Camera or microphone access was blocked. Allow it in your browser settings and try again.'; return;
+    }
+    isHost = true;
+    const v = $('video'); v.srcObject = stream; v.muted = true;
+    show(false);
+    $('hostBar').hidden = false;
+    $('screenBtn').hidden = !(navigator.mediaDevices.getDisplayMedia);
+    openPeer(roomCode());
+  }
+
+  function openPeer(room){
+    peer = new Peer(PREFIX + room);
+    peer.on('open', () => {
+      const url = location.origin + location.pathname + '?watch=' + room;
+      $('link').value = url; $('share').hidden = false;
+      $('codeText').textContent = room; $('codeLine').hidden = false;
+      setBadge(true, 'Live · 0 viewers');
+    });
+    peer.on('error', e => {
+      if (e.type === 'unavailable-id'){ peer.destroy(); openPeer(roomCode()); return; }
+      $('stageErr').textContent = 'Connection problem: ' + (e.type || 'unknown') + '. Check your network and reload.';
+    });
+    peer.on('connection', c => {
+      c.on('open', () => {
+        const call = peer.call(c.peer, stream);
+        viewers.set(c.peer, {conn:c, call});
+        c.send({type:'history', items:history});
+        count();
+      });
+      c.on('data', d => {
+        if (d && d.type === 'chat'){
+          const text = clean(d.text, 300); if (!text) return;
+          post({name: clean(d.name, 24) || 'Guest', text, host:false});
+        }
+      });
+      c.on('close', () => drop(c.peer));
+      c.on('error', () => drop(c.peer));
+    });
+  }
+
+  async function swapVideo(kind){
+    $('stageErr').textContent = '';
+    const old = stream.getVideoTracks()[0];
+    try {
+      let nt;
+      if (kind === 'screen'){
+        nt = (await navigator.mediaDevices.getDisplayMedia({video:true})).getVideoTracks()[0];
+      } else {
+        if (old) old.stop();   // some phones need the old camera released first
+        nt = (await navigator.mediaDevices.getUserMedia({video:{facingMode:facing}})).getVideoTracks()[0];
+      }
+      viewers.forEach(v => {
+        const s = v.call && v.call.peerConnection && v.call.peerConnection.getSenders().find(x => x.track && x.track.kind === 'video');
+        if (s) s.replaceTrack(nt);
+      });
+      if (old){ stream.removeTrack(old); old.stop(); }
+      stream.addTrack(nt);
+      $('video').srcObject = stream;
+      $('camBtn').hidden = kind !== 'screen';
+      $('flip').hidden = kind === 'screen';
+      if (kind === 'screen') nt.onended = () => swapVideo('camera');
+    } catch(e){
+      $('stageErr').textContent = 'Couldn’t switch the video source.';
+    }
+  }
+
+  function endHost(){
+    broadcast({type:'ended'});
+    viewers.forEach(v => { try { v.call.close(); } catch(e){} });
+    if (stream) stream.getTracks().forEach(t => t.stop());
+    if (peer) peer.destroy();
+    location.href = location.pathname;
+  }
+
+  /* ---------- viewer ---------- */
+  function startViewer(room){
+    isHost = false; show(false);
+    $('hostBar').hidden = true;
+    setBadge(false, 'Connecting…'); overlay('Connecting to the broadcast…');
+    peer = new Peer();
+    peer.on('open', () => {
+      conn = peer.connect(PREFIX + room, {reliable:true});
+      conn.on('open', () => { overlay('Waiting for video…'); });
+      conn.on('data', d => {
+        if (!d) return;
+        if (d.type === 'chat') addMsg(d.msg);
+        if (d.type === 'history') d.items.forEach(addMsg);
+        if (d.type === 'count') setBadge(true, 'Live · ' + d.n + (d.n === 1 ? ' viewer' : ' viewers'));
+        if (d.type === 'ended') ended();
+      });
+      conn.on('close', ended);
+    });
+    peer.on('call', call => {
+      call.answer();
+      call.on('stream', s => {
+        const v = $('video'); v.srcObject = s; overlay('');
+        v.play().catch(() => {});
+        $('unmute').hidden = false;
+      });
+      call.on('close', ended);
+    });
+    peer.on('error', e => {
+      if (e.type === 'peer-unavailable') overlay('No broadcast found with that code. It may have ended.');
+      else overlay('Couldn’t connect (' + (e.type || 'error') + '). Reload to try again.');
+      setBadge(false, 'Offline');
+    });
+  }
+  function ended(){ setBadge(false, 'Ended'); overlay('The broadcast has ended.'); $('unmute').hidden = true; }
+
+  /* ---------- wiring ---------- */
+  $('goLive').onclick = startHost;
+  $('watchBtn').onclick = () => {
+    const c = clean($('codeIn').value, 6).toUpperCase();
+    if (c.length === 6) location.href = location.pathname + '?watch=' + c;
+    else $('codeIn').focus();
+  };
+  $('codeIn').addEventListener('keydown', e => { if (e.key === 'Enter') $('watchBtn').click(); });
+  $('unmute').onclick = () => { const v = $('video'); v.muted = !v.muted; $('unmute').textContent = v.muted ? 'Unmute' : 'Mute'; };
+  $('flip').onclick = () => { facing = facing === 'user' ? 'environment' : 'user'; swapVideo('camera'); };
+  $('screenBtn').onclick = () => swapVideo('screen');
+  $('camBtn').onclick = () => swapVideo('camera');
+  $('endBtn').onclick = endHost;
+  $('copy').onclick = async () => {
+    try { await navigator.clipboard.writeText($('link').value); $('copy').textContent = 'Copied'; }
+    catch(e){ $('link').select(); }
+    setTimeout(() => $('copy').textContent = 'Copy link', 1500);
+  };
+  $('sendForm').addEventListener('submit', e => {
+    e.preventDefault();
+    const text = clean($('textIn').value, 300); if (!text) return;
+    if (isHost) post({name:'Host', text, host:true});
+    else if (conn && conn.open) conn.send({type:'chat', name: clean($('nameIn').value, 24) || 'Guest', text});
+    $('textIn').value = '';
+  });
+  window.addEventListener('beforeunload', () => { if (peer) peer.destroy(); });
+
+  const room = new URLSearchParams(location.search).get('watch');
+  if (room && /^[A-Za-z0-9]{6}$/.test(room)) startViewer(room.toUpperCase());
+})();
+</script>
+</body>
+</html>
